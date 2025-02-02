@@ -311,6 +311,11 @@ with st.sidebar:
                 st.success("Person added successfully!")
             
             save_people_data()
+            
+            # Clear the form by removing the uploaded file from session state
+            if 'add_person' in st.session_state:
+                del st.session_state.add_person
+            
             st.rerun()
 
 # Main content - Display people grid
