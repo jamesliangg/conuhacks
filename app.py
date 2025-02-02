@@ -25,6 +25,13 @@ if 'button_clicked' not in st.session_state:
 if 'button_states' not in st.session_state:
     st.session_state.button_states = {}
 
+if 'events' not in st.session_state:
+    if os.path.exists('events_data.json'):
+        with open('events_data.json', 'r') as f:
+            st.session_state.events = json.load(f)
+    else:
+        st.session_state.events = []
+
 # Dictionary of state abbreviations
 COUNTRIES = {
     'United States': 'USA',
@@ -121,6 +128,10 @@ def handle_date_add(person, new_date):
         person['dates'].append(date_str)
         person['dates'].sort()
         save_people_data()
+
+def save_events_data():
+    with open('events_data.json', 'w') as f:
+        json.dump(st.session_state.events, f)
 
 # Modal dialog
 if st.session_state.show_modal:
@@ -464,3 +475,99 @@ if map_data:
         st.plotly_chart(fig_us, use_container_width=True)
 else:
     st.info("Add people to see them on the map!")
+
+# Box Cutters Gallery section
+st.header("Box Cutters")
+
+# Add event form
+with st.expander("Add New Event"):
+    event_name = st.text_input("Event Name")
+    event_date = st.date_input("Event Date")
+    event_photos = st.file_uploader(
+        "Upload Photos", 
+        type=['jpg', 'jpeg', 'png'],
+        accept_multiple_files=True
+    )
+    
+    if st.button("Add Event") and event_name and event_date and event_photos:
+        # Create event directory if it doesn't exist
+        event_dir = "event_images"
+        if not os.path.exists(event_dir):
+            os.makedirs(event_dir)
+        
+        # Save photos and get their paths
+        photo_paths = []
+        for photo in event_photos:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            photo_path = f"{event_dir}/{event_name}_{timestamp}.jpg"
+            
+            # Process and save the image
+            img = Image.open(photo)
+            img = crop_center_square(img)
+            img = img.resize((300, 300))
+            img.save(photo_path)
+            photo_paths.append(photo_path)
+        
+        # Create event entry
+        event = {
+            "name": event_name,
+            "date": event_date.strftime("%Y-%m-%d"),
+            "photos": photo_paths
+        }
+        
+        st.session_state.events.append(event)
+        save_events_data()
+        st.success("Event added successfully!")
+        st.rerun()
+
+# Display events in a grid
+if st.session_state.events:
+    # Sort events by date (most recent first)
+    sorted_events = sorted(
+        st.session_state.events,
+        key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d'),
+        reverse=True
+    )
+    
+    # Calculate grid layout
+    COLS = 3
+    all_photos = []
+    
+    # Prepare all photos with their event info
+    for event in sorted_events:
+        for photo_path in event['photos']:
+            if os.path.exists(photo_path):
+                all_photos.append({
+                    'path': photo_path,
+                    'event_name': event['name'],
+                    'date': event['date'],
+                    'event': event  # Keep reference to full event
+                })
+    
+    # Create grid layout
+    rows = math.ceil(len(all_photos) / COLS)
+    
+    for row in range(rows):
+        cols = st.columns(COLS, gap="small")
+        for col in range(COLS):
+            idx = row * COLS + col
+            if idx < len(all_photos):
+                photo_info = all_photos[idx]
+                with cols[col]:
+                    st.image(photo_info['path'], use_container_width=True)
+                    st.caption(f"{photo_info['event_name']}")
+                    st.caption(f"{photo_info['date']}")
+                    
+                    # Add delete button for each event
+                    if st.button("Delete Event", key=f"delete_event_{photo_info['event_name']}_{idx}"):
+                        event = photo_info['event']
+                        # Delete all photos
+                        for path in event['photos']:
+                            if os.path.exists(path):
+                                os.remove(path)
+                        # Remove event from list
+                        st.session_state.events.remove(event)
+                        save_events_data()
+                        st.rerun()
+else:
+    st.info("No events added yet. Add your first event above!")

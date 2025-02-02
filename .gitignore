@@ -160,3 +160,5 @@ pip-selfcheck.json
 .env
 images/*
 people_data.json
+event_images/
+events_data.json
