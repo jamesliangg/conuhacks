@@ -1,4 +1,6 @@
+# Add this as the first line after imports
 import streamlit as st
+st.set_page_config(page_title="Have I Met You Before?", page_icon="📸")
 from datetime import datetime
 import json
 import os
