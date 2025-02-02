@@ -275,7 +275,7 @@ if st.session_state.show_modal:
                 close_modal()
 
 # App title
-st.title("People Logger")
+st.title("MLH Coaches You've Met")
 
 # Sidebar for adding new people
 with st.sidebar:
@@ -355,7 +355,7 @@ with st.sidebar:
             
 
 # Main content - Display people grid
-st.header("People You've Met")
+# st.header("People You've Met")
 
 # Create grid layout
 COLS = 3
@@ -389,7 +389,7 @@ for row in range(rows):
                                  args=(idx,))
 
 # Add this at the bottom of the file, after the grid display
-st.header("Where People Are From")
+st.header("Where Coaches Are From")
 
 # Create DataFrame for the map
 people_by_location = {}
@@ -446,7 +446,7 @@ if map_data:
     
     # Customize the map view to focus on our countries of interest
     fig.update_layout(
-        title_text='People Met by Country',
+        title_text='Coaches Met by Country',
         geo=dict(
             scope='world',
             projection_type='equirectangular',
@@ -484,7 +484,7 @@ else:
     st.info("Add people to see them on the map!")
 
 # Box Cutters Gallery section
-st.header("Box Cutters")
+st.header("Hackathon Box Cutters")
 
 # Add event form
 with st.expander("Add New Event"):
