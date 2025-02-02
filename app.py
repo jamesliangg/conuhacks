@@ -4,6 +4,8 @@ import json
 import os
 from PIL import Image
 import math
+import plotly.express as px
+import pandas as pd
 
 # Initialize session states
 if 'people' not in st.session_state:
@@ -16,6 +18,28 @@ if 'people' not in st.session_state:
 if 'show_modal' not in st.session_state:
     st.session_state.show_modal = False
     st.session_state.current_person_idx = None
+
+# Dictionary of state abbreviations
+COUNTRIES = {
+    'United States': 'USA',
+    'Canada': 'CAN',
+    'Mexico': 'MEX',
+    'United Kingdom': 'GBR'
+}
+
+# For US states, we'll keep them as regions
+US_STATES = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+    'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+    'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+    'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+    'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+    'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
+}
 
 def crop_center_square(image):
     width, height = image.size
@@ -149,7 +173,20 @@ if st.session_state.show_modal:
             # Edit fields
             new_name = st.text_input("Name", person['name'])
             new_location = st.text_input("Met at", person['location_met'])
-            new_origin = st.text_input("From", person['origin'])
+            
+            # Location fields
+            new_country = st.selectbox("Country", 
+                                     options=list(COUNTRIES.keys()), 
+                                     index=list(COUNTRIES.keys()).index(person.get('country', 'United States')))
+            
+            if new_country == "United States":
+                new_state = st.selectbox("State", 
+                                       options=list(US_STATES.keys()),
+                                       index=list(US_STATES.keys()).index(person.get('state', 'New York')))
+            else:
+                new_state = None
+            
+            new_city = st.text_input("City/Town", person.get('city', ''))
             
             # Show and edit dates
             st.write("**Meeting dates:**")
@@ -159,7 +196,6 @@ if st.session_state.show_modal:
                 with col1:
                     st.write(f"- {date}")
                 with col2:
-                    # Make key unique by including person name and index
                     if st.button("🗑", key=f"delete_{person['name']}_{date}_{i}"):
                         dates_to_remove.append(date)
             
@@ -178,13 +214,17 @@ if st.session_state.show_modal:
             # Save changes
             if (new_name != person['name'] or 
                 new_location != person['location_met'] or 
-                new_origin != person['origin'] or 
+                new_country != person.get('country') or
+                new_state != person.get('state') or
+                new_city != person.get('city') or
                 dates_to_remove):
                 
                 person.update({
                     "name": new_name,
                     "location_met": new_location,
-                    "origin": new_origin
+                    "country": new_country,
+                    "state": new_state if new_country == "United States" else None,
+                    "city": new_city
                 })
                 save_people_data()
                 st.success("Changes saved!")
@@ -217,11 +257,21 @@ with st.sidebar:
         photo = st.file_uploader("Photo", type=['jpg', 'jpeg', 'png'])
         location_met = st.text_input("Location Met")
         
-        # Only show "Where they're from" for new people
+        # Only show origin fields for new people
         if not existing_person:
-            origin = st.text_input("Where they're from")
+            country = st.selectbox("Country", options=list(COUNTRIES.keys()))
+            
+            # Show state selection only for US
+            if country == "United States":
+                state = st.selectbox("State", options=list(US_STATES.keys()))
+            else:
+                state = None
+                
+            city = st.text_input("City/Town")
         else:
-            origin = existing_person['origin']
+            country = existing_person['country']
+            state = existing_person.get('state')
+            city = existing_person['city']
             st.write(f"Adding new meeting for existing person: {name}")
         
         date_met = st.date_input("Date Met")
@@ -243,7 +293,9 @@ with st.sidebar:
                     "name": name,
                     "photos": [image_path],
                     "location_met": location_met,
-                    "origin": origin,
+                    "country": country,
+                    "state": state if country == "United States" else None,
+                    "city": city,
                     "dates": [date_met.strftime("%Y-%m-%d")]
                 }
                 st.session_state.people.append(person)
@@ -282,3 +334,98 @@ for row in range(rows):
                             st.caption(f"Last seen: {last_seen}")
                         if st.button("View Details", key=f"person_{idx}"):
                             show_person_modal(idx)
+
+# Add this at the bottom of the file, after the grid display
+st.header("Where People Are From")
+
+# Create DataFrame for the map
+people_by_location = {}
+for person in st.session_state.people:
+    country = person.get('country', 'Unknown')
+    if country not in people_by_location:
+        people_by_location[country] = []
+    people_by_location[country].append(person['name'])
+
+map_data = []
+for country, names in people_by_location.items():
+    location = {
+        'country': country,
+        'country_code': COUNTRIES.get(country, ''),
+        'people': ', '.join(names),
+        'count': len(names)
+    }
+    map_data.append(location)
+    
+    # Add US states if country is United States
+    if country == 'United States':
+        us_people_by_state = {}
+        for person in [p for p in st.session_state.people if p.get('country') == 'United States']:
+            state = person.get('state')
+            if state:
+                if state not in us_people_by_state:
+                    us_people_by_state[state] = []
+                us_people_by_state[state].append(person['name'])
+        
+        for state, state_names in us_people_by_state.items():
+            map_data.append({
+                'country': 'United States',
+                'country_code': 'USA',
+                'state': state,
+                'state_code': US_STATES[state],
+                'people': ', '.join(state_names),
+                'count': len(state_names)
+            })
+
+if map_data:
+    df = pd.DataFrame(map_data)
+    
+    # Create world map
+    fig = px.choropleth(
+        df,
+        locations='country_code',
+        locationmode='ISO-3',
+        color='count',
+        scope='world',
+        hover_data=['people'],
+        color_continuous_scale='Viridis',
+        labels={'count': 'Number of People', 'people': 'Names'}
+    )
+    
+    # Customize the map view to focus on our countries of interest
+    fig.update_layout(
+        title_text='People Met by Country',
+        geo=dict(
+            scope='world',
+            projection_type='equirectangular',
+            visible=True,
+            center=dict(lat=45, lon=-100),  # Center roughly between North America and UK
+            lonaxis_range=[-130, 0],  # Longitude range to show
+            lataxis_range=[15, 75],   # Latitude range to show
+        )
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # If there are US people, show US state map
+    us_data = df[df['country_code'] == 'USA'].copy()
+    if not us_data.empty and 'state_code' in us_data.columns:
+        st.subheader("United States Breakdown")
+        fig_us = px.choropleth(
+            us_data,
+            locations='state_code',
+            locationmode='USA-states',
+            color='count',
+            scope='usa',
+            hover_data=['people'],
+            color_continuous_scale='Viridis',
+            labels={'count': 'Number of People', 'people': 'Names'}
+        )
+        
+        fig_us.update_layout(
+            title_text='People Met by State (US)',
+            geo_scope='usa',
+        )
+        
+        st.plotly_chart(fig_us, use_container_width=True)
+else:
+    st.info("Add people to see them on the map!")
