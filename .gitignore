@@ -156,3 +156,7 @@ pip-selfcheck.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/pycharm+all,macos,visualstudiocode,venv
+
+.env
+images/*
+people_data.json
