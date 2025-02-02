@@ -19,6 +19,12 @@ if 'show_modal' not in st.session_state:
     st.session_state.show_modal = False
     st.session_state.current_person_idx = None
 
+if 'button_clicked' not in st.session_state:
+    st.session_state.button_clicked = False
+
+if 'button_states' not in st.session_state:
+    st.session_state.button_states = {}
+
 # Dictionary of state abbreviations
 COUNTRIES = {
     'United States': 'USA',
@@ -86,6 +92,36 @@ def get_photo_timestamp(photo_path):
     except:
         return datetime.min
 
+def set_button_clicked():
+    st.session_state.button_clicked = True
+
+def handle_photo_nav(person_name, direction):
+    current_idx = st.session_state[f"current_photo_{person_name}"]
+    if direction == "prev" and current_idx > 0:
+        st.session_state[f"current_photo_{person_name}"] = current_idx - 1
+    elif direction == "next":
+        st.session_state[f"current_photo_{person_name}"] = current_idx + 1
+
+def handle_photo_delete(person, current_idx):
+    delete_image(person['photos'][current_idx])
+    person['photos'].pop(current_idx)
+    st.session_state[f"current_photo_{person['name']}"] = min(
+        current_idx,
+        len(person['photos']) - 1
+    ) if person['photos'] else 0
+    save_people_data()
+
+def handle_date_delete(person, date):
+    person['dates'].remove(date)
+    save_people_data()
+
+def handle_date_add(person, new_date):
+    date_str = new_date.strftime("%Y-%m-%d")
+    if date_str not in person['dates']:
+        person['dates'].append(date_str)
+        person['dates'].sort()
+        save_people_data()
+
 # Modal dialog
 if st.session_state.show_modal:
     person = st.session_state.people[st.session_state.current_person_idx]
@@ -118,41 +154,32 @@ if st.session_state.show_modal:
             if person['photos']:
                 current_idx = st.session_state[f"current_photo_{person['name']}"]
                 
-                # Ensure current_idx is within bounds
-                if current_idx >= len(person['photos']):
-                    current_idx = len(person['photos']) - 1
-                    st.session_state[f"current_photo_{person['name']}"] = current_idx
-                
                 # Navigation buttons
                 col1, col2, col3 = st.columns([1, 3, 1])
                 with col1:
                     if current_idx > 0:
-                        if st.button("←"):
-                            st.session_state[f"current_photo_{person['name']}"] -= 1
-                            st.rerun()
+                        st.button("←", 
+                                 key=f"prev_{person['name']}_{current_idx}",
+                                 on_click=handle_photo_nav,
+                                 args=(person['name'], "prev"))
                 
                 with col2:
                     st.write(f"Photo {current_idx + 1} of {len(person['photos'])}")
                 
                 with col3:
                     if current_idx < len(person['photos']) - 1:
-                        if st.button("→"):
-                            st.session_state[f"current_photo_{person['name']}"] += 1
-                            st.rerun()
+                        st.button("→", 
+                                 key=f"next_{person['name']}_{current_idx}",
+                                 on_click=handle_photo_nav,
+                                 args=(person['name'], "next"))
                 
                 # Display current photo
                 if os.path.exists(person['photos'][current_idx]):
                     st.image(person['photos'][current_idx], use_container_width=True)
-                    if st.button("Delete Current Photo"):
-                        delete_image(person['photos'][current_idx])
-                        person['photos'].pop(current_idx)
-                        # Reset index if needed after deletion
-                        st.session_state[f"current_photo_{person['name']}"] = min(
-                            current_idx,
-                            len(person['photos']) - 1
-                        ) if person['photos'] else 0
-                        save_people_data()
-                        st.rerun()
+                    st.button("Delete Current Photo",
+                             key=f"delete_photo_{person['name']}_{current_idx}",
+                             on_click=handle_photo_delete,
+                             args=(person, current_idx))
             
             # Add new photo
             new_photo = st.file_uploader("Add new photo", type=['jpg', 'jpeg', 'png'])
@@ -167,7 +194,6 @@ if st.session_state.show_modal:
                     save_people_data()
                     # Mark this photo as uploaded
                     st.session_state[upload_key] = True
-                    st.rerun()
         
         with details_col:
             # Edit fields
@@ -190,34 +216,29 @@ if st.session_state.show_modal:
             
             # Show and edit dates
             st.write("**Meeting dates:**")
-            dates_to_remove = []
             for i, date in enumerate(person['dates']):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"- {date}")
                 with col2:
-                    if st.button("🗑", key=f"delete_{person['name']}_{date}_{i}"):
-                        dates_to_remove.append(date)
-            
-            # Remove selected dates
-            for date in dates_to_remove:
-                person['dates'].remove(date)
+                    st.button("🗑", 
+                             key=f"delete_date_{person['name']}_{date}_{i}",
+                             on_click=handle_date_delete,
+                             args=(person, date))
             
             # Add new date
             new_date = st.date_input("Add new date")
-            if st.button("Add Date", key=f"add_date_{person['name']}_modal"):
-                date_str = new_date.strftime("%Y-%m-%d")
-                if date_str not in person['dates']:
-                    person['dates'].append(date_str)
-                    person['dates'].sort()
+            st.button("Add Date",
+                     key=f"add_date_{person['name']}",
+                     on_click=handle_date_add,
+                     args=(person, new_date))
             
             # Save changes
             if (new_name != person['name'] or 
                 new_location != person['location_met'] or 
                 new_country != person.get('country') or
                 new_state != person.get('state') or
-                new_city != person.get('city') or
-                dates_to_remove):
+                new_city != person.get('city')):
                 
                 person.update({
                     "name": new_name,
@@ -236,7 +257,6 @@ if st.session_state.show_modal:
                 st.session_state.people.pop(st.session_state.current_person_idx)
                 save_people_data()
                 close_modal()
-                st.rerun()
 
 # App title
 st.title("People Logger")
@@ -316,7 +336,6 @@ with st.sidebar:
             if 'add_person' in st.session_state:
                 del st.session_state.add_person
             
-            st.rerun()
 
 # Main content - Display people grid
 st.header("People You've Met")
@@ -346,8 +365,10 @@ for row in range(rows):
                         if person['dates']:
                             last_seen = max(person['dates'])
                             st.caption(f"Last seen: {last_seen}")
-                        if st.button("View Details", key=f"person_{idx}"):
-                            show_person_modal(idx)
+                        st.button("View Details",
+                                 key=f"view_{idx}",
+                                 on_click=show_person_modal,
+                                 args=(idx,))
 
 # Add this at the bottom of the file, after the grid display
 st.header("Where People Are From")
