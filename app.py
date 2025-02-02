@@ -355,6 +355,41 @@ with st.sidebar:
             if 'add_person' in st.session_state:
                 del st.session_state.add_person
             
+    # Add this after the sidebar form section
+    with st.sidebar:
+        st.markdown("---")  # Add a visual separator
+        st.header("Settings")
+        
+        # Create two columns for the clear buttons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("Clear People", type="secondary"):
+                if st.session_state.people:
+                    # Delete all photos
+                    for person in st.session_state.people:
+                        for photo in person.get('photos', []):
+                            if photo and os.path.exists(photo):
+                                os.remove(photo)
+                    # Clear the list
+                    st.session_state.people = []
+                    save_people_data()
+                    st.success("People gallery cleared!")
+                    st.rerun()
+        
+        with col2:
+            if st.button("Clear Events", type="secondary"):
+                if st.session_state.events:
+                    # Delete all event photos
+                    for event in st.session_state.events:
+                        for photo in event.get('photos', []):
+                            if photo and os.path.exists(photo):
+                                os.remove(photo)
+                    # Clear the list
+                    st.session_state.events = []
+                    save_events_data()
+                    st.success("Events gallery cleared!")
+                    st.rerun()
 
 # Main content - Display people grid
 # st.header("People You've Met")
