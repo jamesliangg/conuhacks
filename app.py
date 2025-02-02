@@ -249,29 +249,38 @@ with st.sidebar:
         
         # Check if person already exists
         existing_person = None
-        for p in st.session_state.people:
-            if p['name'].lower() == name.lower():
-                existing_person = p
-                break
+        if name:  # Only check if name is entered
+            for p in st.session_state.people:
+                if p['name'].lower() == name.lower():
+                    existing_person = p
+                    break
         
         photo = st.file_uploader("Photo", type=['jpg', 'jpeg', 'png'])
         location_met = st.text_input("Location Met")
         
-        # Only show origin fields for new people
-        if not existing_person:
-            country = st.selectbox("Country", options=list(COUNTRIES.keys()))
-            
-            # Show state selection only for US
-            if country == "United States":
-                state = st.selectbox("State", options=list(US_STATES.keys()))
-            else:
-                state = None
-                
-            city = st.text_input("City/Town")
+        # Always show all fields, but pre-fill if person exists
+        country = st.selectbox(
+            "Country",
+            options=list(COUNTRIES.keys()),
+            index=list(COUNTRIES.keys()).index(existing_person['country']) if existing_person else 0
+        )
+        
+        # Show state selection only for US
+        if country == "United States":
+            state = st.selectbox(
+                "State",
+                options=list(US_STATES.keys()),
+                index=list(US_STATES.keys()).index(existing_person.get('state', 'New York')) if existing_person else 0
+            )
         else:
-            country = existing_person['country']
-            state = existing_person.get('state')
-            city = existing_person['city']
+            state = None
+        
+        city = st.text_input(
+            "City/Town",
+            value=existing_person['city'] if existing_person else ""
+        )
+        
+        if existing_person:
             st.write(f"Adding new meeting for existing person: {name}")
         
         date_met = st.date_input("Date Met")
