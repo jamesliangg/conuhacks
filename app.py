@@ -154,12 +154,13 @@ if st.session_state.show_modal:
             # Show and edit dates
             st.write("**Meeting dates:**")
             dates_to_remove = []
-            for date in person['dates']:
+            for i, date in enumerate(person['dates']):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"- {date}")
                 with col2:
-                    if st.button("🗑", key=f"delete_{date}"):
+                    # Make key unique by including person name and index
+                    if st.button("🗑", key=f"delete_{person['name']}_{date}_{i}"):
                         dates_to_remove.append(date)
             
             # Remove selected dates
@@ -168,7 +169,7 @@ if st.session_state.show_modal:
             
             # Add new date
             new_date = st.date_input("Add new date")
-            if st.button("Add Date"):
+            if st.button("Add Date", key=f"add_date_{person['name']}_modal"):
                 date_str = new_date.strftime("%Y-%m-%d")
                 if date_str not in person['dates']:
                     person['dates'].append(date_str)
