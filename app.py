@@ -53,6 +53,15 @@ def close_modal():
     st.session_state.show_modal = False
     st.session_state.current_person_idx = None
 
+def get_photo_timestamp(photo_path):
+    """Extract timestamp from photo filename"""
+    try:
+        # Extract the timestamp part from the filename (assumes format: name_YYYYMMDD_HHMMSS.jpg)
+        timestamp_str = photo_path.split('_')[-1].split('.')[0]
+        return datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+    except:
+        return datetime.min
+
 # Modal dialog
 if st.session_state.show_modal:
     person = st.session_state.people[st.session_state.current_person_idx]
@@ -193,30 +202,53 @@ st.title("People Logger")
 
 # Sidebar for adding new people
 with st.sidebar:
-    st.header("Add New Person")
+    st.header("Add New Meeting")
     with st.form("add_person"):
         name = st.text_input("Name")
+        
+        # Check if person already exists
+        existing_person = None
+        for p in st.session_state.people:
+            if p['name'].lower() == name.lower():
+                existing_person = p
+                break
+        
         photo = st.file_uploader("Photo", type=['jpg', 'jpeg', 'png'])
         location_met = st.text_input("Location Met")
-        origin = st.text_input("Where they're from")
+        
+        # Only show "Where they're from" for new people
+        if not existing_person:
+            origin = st.text_input("Where they're from")
+        else:
+            origin = existing_person['origin']
+            st.write(f"Adding new meeting for existing person: {name}")
+        
         date_met = st.date_input("Date Met")
         
-        submitted = st.form_submit_button("Add Person")
+        submitted = st.form_submit_button("Add Meeting")
         
-        if submitted and name and photo and location_met and origin and date_met:
+        if submitted and name and photo and location_met and date_met:
             image_path = save_image(photo, name)
             
-            person = {
-                "name": name,
-                "photos": [image_path],  # Changed from photo to photos
-                "location_met": location_met,
-                "origin": origin,
-                "dates": [date_met.strftime("%Y-%m-%d")]
-            }
+            if existing_person:
+                # Add to existing person
+                existing_person['photos'].append(image_path)
+                existing_person['dates'].append(date_met.strftime("%Y-%m-%d"))
+                existing_person['dates'].sort()
+                st.success("Meeting added successfully!")
+            else:
+                # Create new person
+                person = {
+                    "name": name,
+                    "photos": [image_path],
+                    "location_met": location_met,
+                    "origin": origin,
+                    "dates": [date_met.strftime("%Y-%m-%d")]
+                }
+                st.session_state.people.append(person)
+                st.success("Person added successfully!")
             
-            st.session_state.people.append(person)
             save_people_data()
-            st.success("Person added successfully!")
             st.rerun()
 
 # Main content - Display people grid
@@ -235,9 +267,17 @@ for row in range(rows):
             with cols[col]:
                 # Handle both old and new format
                 photos = person.get('photos', [person.get('photo')]) if 'photos' in person or 'photo' in person else []
-                if photos and photos[0] is not None and os.path.exists(photos[0]):
-                    st.image(photos[0], 
-                            caption=person['name'], 
-                            use_container_width=True)
-                    if st.button("View Details", key=f"person_{idx}"):
-                        show_person_modal(idx)
+                if photos and photos[0] is not None:
+                    # Sort photos by timestamp and get the most recent one
+                    valid_photos = [p for p in photos if p and os.path.exists(p)]
+                    if valid_photos:
+                        most_recent_photo = max(valid_photos, key=get_photo_timestamp)
+                        st.image(most_recent_photo, 
+                                caption=person['name'], 
+                                use_container_width=True)
+                        # Add last seen date
+                        if person['dates']:
+                            last_seen = max(person['dates'])
+                            st.caption(f"Last seen: {last_seen}")
+                        if st.button("View Details", key=f"person_{idx}"):
+                            show_person_modal(idx)
