@@ -209,7 +209,6 @@ if st.session_state.show_modal:
         with details_col:
             # Edit fields
             new_name = st.text_input("Name", person['name'])
-            new_location = st.text_input("Met at", person['location_met'])
             
             # Location fields
             new_country = st.selectbox("Country", 
@@ -223,40 +222,46 @@ if st.session_state.show_modal:
             else:
                 new_state = None
             
-            new_city = st.text_input("City/Town", person.get('city', ''))
-            
-            # Show and edit dates
-            st.write("**Meeting dates:**")
-            for i, date in enumerate(person['dates']):
-                col1, col2 = st.columns([3, 1])
+            # Show and edit meetings
+            st.write("**Meetings:**")
+            meetings_to_remove = []
+            for i, meeting in enumerate(person['meetings']):
+                col1, col2, col3 = st.columns([2, 2, 1])
                 with col1:
-                    st.write(f"- {date}")
+                    st.write(f"- {meeting['date']}")
                 with col2:
-                    st.button("🗑", 
-                             key=f"delete_date_{person['name']}_{date}_{i}",
-                             on_click=handle_date_delete,
-                             args=(person, date))
+                    st.write(meeting['location'])
+                with col3:
+                    if st.button("🗑", key=f"delete_meeting_{person['name']}_{i}"):
+                        meetings_to_remove.append(meeting)
             
-            # Add new date
+            # Remove selected meetings
+            for meeting in meetings_to_remove:
+                person['meetings'].remove(meeting)
+            
+            # Add new meeting
             new_date = st.date_input("Add new date")
-            st.button("Add Date",
-                     key=f"add_date_{person['name']}",
-                     on_click=handle_date_add,
-                     args=(person, new_date))
+            new_location = st.text_input("Location")
+            if st.button("Add Meeting", key=f"add_meeting_{person['name']}_modal"):
+                date_str = new_date.strftime("%Y-%m-%d")
+                if not any(m['date'] == date_str for m in person['meetings']):
+                    person['meetings'].append({
+                        "date": date_str,
+                        "location": new_location
+                    })
+                    person['meetings'].sort(key=lambda x: x['date'])
+                    save_people_data()
+                    st.success("Meeting added!")
             
             # Save changes
             if (new_name != person['name'] or 
-                new_location != person['location_met'] or 
                 new_country != person.get('country') or
-                new_state != person.get('state') or
-                new_city != person.get('city')):
+                new_state != person.get('state')):
                 
                 person.update({
                     "name": new_name,
-                    "location_met": new_location,
                     "country": new_country,
-                    "state": new_state if new_country == "United States" else None,
-                    "city": new_city
+                    "state": new_state if new_country == "United States" else None
                 })
                 save_people_data()
                 st.success("Changes saved!")
@@ -306,11 +311,6 @@ with st.sidebar:
         else:
             state = None
         
-        city = st.text_input(
-            "City/Town",
-            value=existing_person['city'] if existing_person else ""
-        )
-        
         if existing_person:
             st.write(f"Adding new meeting for existing person: {name}")
         
@@ -324,19 +324,25 @@ with st.sidebar:
             if existing_person:
                 # Add to existing person
                 existing_person['photos'].append(image_path)
-                existing_person['dates'].append(date_met.strftime("%Y-%m-%d"))
-                existing_person['dates'].sort()
+                # Store date with location
+                existing_person['meetings'].append({
+                    "date": date_met.strftime("%Y-%m-%d"),
+                    "location": location_met
+                })
+                # Sort meetings by date
+                existing_person['meetings'].sort(key=lambda x: x['date'])
                 st.success("Meeting added successfully!")
             else:
                 # Create new person
                 person = {
                     "name": name,
                     "photos": [image_path],
-                    "location_met": location_met,
                     "country": country,
                     "state": state if country == "United States" else None,
-                    "city": city,
-                    "dates": [date_met.strftime("%Y-%m-%d")]
+                    "meetings": [{
+                        "date": date_met.strftime("%Y-%m-%d"),
+                        "location": location_met
+                    }]
                 }
                 st.session_state.people.append(person)
                 st.success("Person added successfully!")
@@ -372,10 +378,11 @@ for row in range(rows):
                         st.image(most_recent_photo, 
                                 caption=person['name'], 
                                 use_container_width=True)
-                        # Add last seen date
-                        if person['dates']:
-                            last_seen = max(person['dates'])
-                            st.caption(f"Last seen: {last_seen}")
+                        # Add last seen date and location
+                        if person.get('meetings'):
+                            last_meeting = person['meetings'][-1]
+                            st.caption(f"Last seen: {last_meeting['date']}")
+                            st.caption(f"At: {last_meeting['location']}")
                         st.button("View Details",
                                  key=f"view_{idx}",
                                  on_click=show_person_modal,
